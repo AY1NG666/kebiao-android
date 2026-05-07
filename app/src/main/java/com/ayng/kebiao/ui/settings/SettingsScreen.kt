@@ -54,8 +54,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ayng.kebiao.data.db.entity.SalaryRule
 import com.ayng.kebiao.data.parser.ExcelParser
-import com.ayng.kebiao.data.update.UpdateCheckResult
-import com.ayng.kebiao.data.update.UpdateManager
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -130,19 +128,6 @@ fun SettingsScreen(vm: SettingsViewModel) {
                         }
                     }
                 }
-            }
-
-            // ── Update Check ──
-            item {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                Text(
-                    text = "版本更新",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-            item {
-                UpdateSection()
             }
 
             // Bottom spacer
@@ -221,108 +206,6 @@ fun ImportButton(vm: SettingsViewModel, modifier: Modifier = Modifier) {
                 TextButton(onClick = { showResult = null }) { Text("确定") }
             },
         )
-    }
-}
-
-@Composable
-fun UpdateSection() {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val updateManager = remember { UpdateManager(context) }
-
-    var checking by remember { mutableStateOf(false) }
-    var checkResult by remember { mutableStateOf<UpdateCheckResult?>(null) }
-    var downloading by remember { mutableStateOf(false) }
-
-    val currentVersion = remember { updateManager.getCurrentVersion() }
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        // Current version
-        Text(
-            text = "当前版本：$currentVersion",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        // Check update button
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            androidx.compose.material3.Button(
-                onClick = {
-                    checking = true
-                    checkResult = null
-                    scope.launch {
-                        val result = updateManager.checkForUpdate()
-                        checkResult = result
-                        checking = false
-                    }
-                },
-                enabled = !checking,
-            ) {
-                Text(if (checking) "检查中..." else "检查更新")
-            }
-        }
-
-        // Progress
-        if (checking) {
-            androidx.compose.material3.LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-        }
-
-        // Result
-        checkResult?.let { result ->
-            if (result.error != null) {
-                Text(
-                    text = "检查失败：${result.error}",
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            } else if (result.hasUpdate && result.updateInfo != null) {
-                val info = result.updateInfo
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
-                    ),
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            text = "发现新版本 v${info.versionName}",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        if (info.releaseNotes.isNotBlank()) {
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = info.releaseNotes,
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        androidx.compose.material3.Button(
-                            onClick = {
-                                downloading = true
-                                updateManager.downloadAndInstall(info) {
-                                    Toast.makeText(context, "正在后台下载更新...", Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            enabled = !downloading,
-                        ) {
-                            Text(if (downloading) "下载中..." else "立即更新")
-                        }
-                    }
-                }
-            } else {
-                Text(
-                    text = "已是最新版本 ✓",
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-        }
     }
 }
 
