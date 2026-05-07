@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Calendar body -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M24,38 L24,88 Q24,92 28,92 L80,92 Q84,92 84,88 L84,38z" />
+
+    <!-- Calendar header (month bar) -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M24,28 L24,38 L84,38 L84,28z" />
+
+    <!-- Left binder ring -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M32,22 Q32,18 36,18 L36,30 L32,30z" />
+    <!-- Right binder ring -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M72,22 Q72,18 76,18 L76,30 L72,30z" />
+
+    <!-- Month text dots -->
+    <path android:fillColor="#FFFFFF" android:pathData="M36,32h6v4h-6z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M46,32h10v4h-10z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M60,32h6v4h-6z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M70,32h4v4h-4z" />
+
+    <!-- Calendar grid lines (subtle) -->
+    <path android:fillColor="#E0E7FF" android:pathData="M42,38h1v50h-1z" />
+    <path android:fillColor="#E0E7FF" android:pathData="M60,38h1v50h-1z" />
+
+    <!-- Date "7" (bold) -->
+    <path
+        android:fillColor="#4F46E5"
+        android:pathData="M48,44h6v4h-6z M50,50h10v16l-4,4h0l-6,4v-4l6-4v-2h-6z" />
+
+    <!-- Small clock icon bottom-right -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M62,56 Q60,54 62,52 Q64,50 66,52 Q68,54 66,56 Q64,58 62,56z M63.5,53v2.5h1.5" />
+</vector>

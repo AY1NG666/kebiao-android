@@ -1,0 +1,6 @@
+{
+  "versionCode": 7,
+  "versionName": "1.7",
+  "apkUrl": "http://103.236.97.252:8888/kebiao.apk",
+  "releaseNotes": "出勤录入改为日期驱动：选日期自动列出当天课程，一次录入全部"
+}

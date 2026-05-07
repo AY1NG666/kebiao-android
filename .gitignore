@@ -1,0 +1,8 @@
+kebiao-android
+*.iml
+.gradle/
+build/
+.idea/
+local.properties
+*.apk
+*.aab
