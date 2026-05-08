@@ -1,5 +1,6 @@
 package com.ayng.kebiao.ui.attendance
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,17 +13,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -30,6 +33,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -139,11 +143,20 @@ fun AttendanceScreen(vm: AttendanceViewModel) {
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
                             )
-                            Text(
-                                text = rememberDateFormat(att.date),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = rememberDateFormat(att.date),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                if (!att.note.isNullOrBlank()) {
+                                    Text(
+                                        text = " · ${att.note}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.tertiary,
+                                    )
+                                }
+                            }
                         }
                         val isKinderCourse = courses.find { it.id == att.courseId }?.isKindergarten == true
                         if (!isKinderCourse && att.studentCount > 0) {
@@ -173,8 +186,8 @@ fun AttendanceScreen(vm: AttendanceViewModel) {
             courses = courses,
             existingAttendances = attendances,
             onDismiss = { showRecordDialog = false },
-            onConfirm = { date, entries ->
-                vm.recordDayAttendance(date, entries)
+            onConfirm = { date, entries, note ->
+                vm.recordDayAttendanceCustom(date, entries, note)
                 showRecordDialog = false
             },
         )
@@ -231,7 +244,6 @@ private fun parseDateFlexible(s: String): java.util.Date? {
         try {
             val d = fmt.parse(s)
             if (d != null) {
-                // If no year specified, use current year
                 if (s.length <= 6) {
                     val cal = Calendar.getInstance()
                     cal.time = d
@@ -250,7 +262,7 @@ data class DayEntry(
     var studentCountStr: String = "",
     var assistantCountStr: String = "0",
     var checked: Boolean = true,
-    val alreadyRecorded: Boolean = false,  // already has attendance for this date
+    val alreadyRecorded: Boolean = false,
 )
 
 @Composable
@@ -258,163 +270,244 @@ fun RecordAttendanceDialog(
     courses: List<com.ayng.kebiao.data.db.entity.Course>,
     existingAttendances: List<Attendance>,
     onDismiss: () -> Unit,
-    onConfirm: (date: Long, entries: List<DayEntry>) -> Unit,
+    onConfirm: (date: Long, entries: List<DayEntry>, note: String?) -> Unit,
 ) {
+    var mode by remember { mutableStateOf(0) } // 0=课表, 1=自定义
+
+    // Schedule mode state
     var dateStr by remember {
         val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.CHINESE)
         mutableStateOf(fmt.format(java.util.Date()))
     }
-
     val parsedDate = parseDateFlexible(dateStr)
-
     val dayOfWeek = parsedDate?.let {
         val cal = Calendar.getInstance()
         cal.time = it
         cal.get(Calendar.DAY_OF_WEEK)
     } ?: -1
-
     val ourDay = when (dayOfWeek) {
         Calendar.MONDAY -> 1; Calendar.TUESDAY -> 2; Calendar.WEDNESDAY -> 3
         Calendar.THURSDAY -> 4; Calendar.FRIDAY -> 5; Calendar.SATURDAY -> 6
         Calendar.SUNDAY -> 7; else -> -1
     }
-
     val todayCourses = courses.filter { it.dayOfWeek == ourDay }
-
-    // Check which courses already have attendance for this date
     val dateMillis = parsedDate?.time ?: 0L
     val recordedCourseIds = existingAttendances
         .filter { isSameDay(it.date, dateMillis) }
-        .map { it.courseId }
-        .toSet()
-
-    var entries by remember(todayCourses, recordedCourseIds) {
+        .map { it.courseId }.toSet()
+    var scheduleEntries by remember(todayCourses, recordedCourseIds) {
         mutableStateOf(todayCourses.map {
-            DayEntry(
-                course = it,
-                alreadyRecorded = it.id in recordedCourseIds,
-                checked = it.id !in recordedCourseIds,  // pre-uncheck if already recorded
-            )
+            DayEntry(course = it, alreadyRecorded = it.id in recordedCourseIds, checked = it.id !in recordedCourseIds)
         })
     }
-
-    val dayLabel = when (ourDay) {
-        1 -> "周一"; 2 -> "周二"; 3 -> "周三"; 4 -> "周四"
-        5 -> "周五"; 6 -> "周六"; 7 -> "周日"; else -> ""
-    }
-
+    val dayLabel = when (ourDay) { 1->"周一";2->"周二";3->"周三";4->"周四";5->"周五";6->"周六";7->"周日"; else->"" }
     val dateValid = parsedDate != null
 
+    // Custom mode state
+    var customDateStr by remember {
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.CHINESE)
+        mutableStateOf(fmt.format(java.util.Date()))
+    }
+    val customParsedDate = parseDateFlexible(customDateStr)
+    var selectedCourseId by remember { mutableStateOf<Long?>(null) }
+    var customStudentCount by remember { mutableStateOf("") }
+    var customAssistantCount by remember { mutableStateOf("0") }
+    var customKinderChecked by remember { mutableStateOf(false) }
+    var customStartH by remember { mutableStateOf("") }
+    var customStartM by remember { mutableStateOf("") }
+    var customEndH by remember { mutableStateOf("") }
+    var customEndM by remember { mutableStateOf("") }
+
+    val selectedCourse = courses.find { it.id == selectedCourseId }
+
+    // === DIALOG ===
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("录入出勤") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = dateStr,
-                    onValueChange = { dateStr = it },
-                    label = { Text("日期") },
-                    placeholder = { Text("如 2026-05-06 或 5月6日") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    isError = dateStr.isNotBlank() && !dateValid,
-                    supportingText = if (dateStr.isNotBlank() && !dateValid)
-                        {{ Text("日期格式不对，试试 yyyy-MM-dd") }} else null,
-                )
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                // Mode switch
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = mode == 0, onClick = { mode = 0 }, label = { Text("课表出勤") })
+                    FilterChip(selected = mode == 1, onClick = { mode = 1 }, label = { Text("自定义出勤") })
+                }
 
-                if (courses.isEmpty()) {
-                    Text("⚠️ 还没有课程！请先去「设置」→「手动添加课程」", color = MaterialTheme.colorScheme.error)
-                } else if (!dateValid) {
-                    Text("请输入有效日期", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else if (todayCourses.isEmpty()) {
-                    Text("${dayLabel}暂无课程", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    HorizontalDivider()
-                    Text("${dayLabel} 共${todayCourses.size}节课", fontWeight = FontWeight.SemiBold)
-
-                    todayCourses.forEachIndexed { idx, course ->
-                        val entry = entries.getOrNull(idx) ?: return@forEachIndexed
-                        val isRecorded = entry.alreadyRecorded
-
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isRecorded)
-                                    MaterialTheme.colorScheme.surfaceVariant
-                                else if (course.isKindergarten)
-                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                                else MaterialTheme.colorScheme.surface
-                            ),
-                        ) {
-                            Column(Modifier.padding(8.dp)) {
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(course.name, fontWeight = FontWeight.Medium)
-                                        if (isRecorded) {
-                                            Spacer(Modifier.width(6.dp))
-                                            Text("已录入", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                                        }
-                                    }
-                                    Text(course.location, style = MaterialTheme.typography.bodySmall)
-                                }
-                                Text("${course.startTime}-${course.endTime}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-
-                                if (isRecorded) {
-                                    Text("此课程已录入，无需重复", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                                } else if (course.isKindergarten) {
-                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text("幼儿园 ¥55/节", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                                        androidx.compose.material3.Switch(
-                                            checked = entry.checked,
-                                            onCheckedChange = {
-                                                val newList = entries.toMutableList()
-                                                newList[idx] = entry.copy(checked = it)
-                                                entries = newList
+                if (mode == 0) {
+                    // ===== SCHEDULE MODE =====
+                    OutlinedTextField(
+                        value = dateStr, onValueChange = { dateStr = it },
+                        label = { Text("日期") },
+                        placeholder = { Text("如 2026-05-06 或 5月6日") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        isError = dateStr.isNotBlank() && !dateValid,
+                        supportingText = if (dateStr.isNotBlank() && !dateValid) {{ Text("日期格式不对") }} else null,
+                    )
+                    if (courses.isEmpty()) {
+                        Text("⚠️ 还没有课程！", color = MaterialTheme.colorScheme.error)
+                    } else if (!dateValid) {
+                        Text("请输入有效日期", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else if (todayCourses.isEmpty()) {
+                        Text("${dayLabel}暂无课程，可切换到自定义出勤", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        HorizontalDivider()
+                        Text("${dayLabel} 共${todayCourses.size}节课", fontWeight = FontWeight.SemiBold)
+                        todayCourses.forEachIndexed { idx, course ->
+                            val entry = scheduleEntries.getOrNull(idx) ?: return@forEachIndexed
+                            val isRecorded = entry.alreadyRecorded
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isRecorded) MaterialTheme.colorScheme.surfaceVariant
+                                    else if (course.isKindergarten) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                    else MaterialTheme.colorScheme.surface
+                                ),
+                            ) {
+                                Column(Modifier.padding(8.dp)) {
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(course.name, fontWeight = FontWeight.Medium)
+                                            if (isRecorded) {
+                                                Spacer(Modifier.width(6.dp))
+                                                Text("已录入", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                                             }
-                                        )
+                                        }
+                                        Text(course.location, style = MaterialTheme.typography.bodySmall)
                                     }
-                                } else {
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        OutlinedTextField(
-                                            value = entry.studentCountStr,
-                                            onValueChange = { v ->
-                                                val newList = entries.toMutableList()
+                                    Text("${course.startTime}-${course.endTime}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (isRecorded) {
+                                        Text("此课程已录入，无需重复", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                                    } else if (course.isKindergarten) {
+                                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                            Text("幼儿园 ¥55/节", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                                            Switch(
+                                                checked = entry.checked,
+                                                onCheckedChange = {
+                                                    val newList = scheduleEntries.toMutableList()
+                                                    newList[idx] = entry.copy(checked = it)
+                                                    scheduleEntries = newList
+                                                }
+                                            )
+                                        }
+                                    } else {
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            OutlinedTextField(value = entry.studentCountStr, onValueChange = { v ->
+                                                val newList = scheduleEntries.toMutableList()
                                                 newList[idx] = entry.copy(studentCountStr = v.filter { c -> c.isDigit() })
-                                                entries = newList
-                                            },
-                                            label = { Text("学生") },
-                                            singleLine = true,
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                        OutlinedTextField(
-                                            value = entry.assistantCountStr,
-                                            onValueChange = { v ->
-                                                val newList = entries.toMutableList()
+                                                scheduleEntries = newList
+                                            }, label = { Text("学生") }, singleLine = true, modifier = Modifier.weight(1f))
+                                            OutlinedTextField(value = entry.assistantCountStr, onValueChange = { v ->
+                                                val newList = scheduleEntries.toMutableList()
                                                 newList[idx] = entry.copy(assistantCountStr = v.filter { c -> c.isDigit() })
-                                                entries = newList
-                                            },
-                                            label = { Text("助教") },
-                                            singleLine = true,
-                                            modifier = Modifier.weight(1f),
-                                        )
+                                                scheduleEntries = newList
+                                            }, label = { Text("助教") }, singleLine = true, modifier = Modifier.weight(1f))
+                                        }
                                     }
                                 }
                             }
+                        }
+                    }
+                } else {
+                    // ===== CUSTOM MODE =====
+                    OutlinedTextField(
+                        value = customDateStr, onValueChange = { customDateStr = it },
+                        label = { Text("日期") },
+                        placeholder = { Text("如 2026-05-06 或 5月6日") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        isError = customDateStr.isNotBlank() && customParsedDate == null,
+                    )
+
+                    Text("选择课程", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    courses.forEach { course ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                selectedCourseId = course.id
+                                if (course.isKindergarten) { customStudentCount = ""; customKinderChecked = false }
+                            },
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (selectedCourseId == course.id) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                else MaterialTheme.colorScheme.surface
+                            ),
+                        ) {
+                            Row(Modifier.padding(10.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(course.name, fontWeight = FontWeight.Medium)
+                                    Text("${course.location}  ${course.startTime}-${course.endTime}", style = MaterialTheme.typography.bodySmall)
+                                }
+                                if (selectedCourseId == course.id) {
+                                    Icon(Icons.Filled.Edit, "已选", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                    }
+
+                    if (selectedCourse != null) {
+                        HorizontalDivider()
+                        if (selectedCourse!!.isKindergarten) {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("到课（¥55/节）", style = MaterialTheme.typography.bodyMedium)
+                                Switch(checked = customKinderChecked, onCheckedChange = { customKinderChecked = it })
+                            }
+                        } else {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(value = customStudentCount, onValueChange = { customStudentCount = it.filter { c -> c.isDigit() } },
+                                    label = { Text("学生") }, singleLine = true, modifier = Modifier.weight(1f))
+                                OutlinedTextField(value = customAssistantCount, onValueChange = { customAssistantCount = it.filter { c -> c.isDigit() } },
+                                    label = { Text("助教") }, singleLine = true, modifier = Modifier.weight(1f))
+                            }
+                        }
+                        // Custom time
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("时间", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            OutlinedTextField(value = customStartH, onValueChange = { customStartH = it.filter { c -> c.isDigit() }.take(2) },
+                                label = { Text("时") }, singleLine = true, modifier = Modifier.width(56.dp))
+                            Text(":"); OutlinedTextField(value = customStartM, onValueChange = { customStartM = it.filter { c -> c.isDigit() }.take(2) },
+                                label = { Text("分") }, singleLine = true, modifier = Modifier.width(56.dp))
+                            Text("→"); OutlinedTextField(value = customEndH, onValueChange = { customEndH = it.filter { c -> c.isDigit() }.take(2) },
+                                label = { Text("时") }, singleLine = true, modifier = Modifier.width(56.dp))
+                            Text(":"); OutlinedTextField(value = customEndM, onValueChange = { customEndM = it.filter { c -> c.isDigit() }.take(2) },
+                                label = { Text("分") }, singleLine = true, modifier = Modifier.width(56.dp))
+                            Text("留空=原课时间", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                         }
                     }
                 }
             }
         },
         confirmButton = {
-            val canConfirm = todayCourses.isNotEmpty() && dateValid && entries.any { entry ->
-                if (entry.alreadyRecorded) false
-                else entry.course.isKindergarten && entry.checked || (!entry.course.isKindergarten && entry.studentCountStr.isNotBlank())
+            val canConfirm = if (mode == 0) {
+                todayCourses.isNotEmpty() && dateValid && scheduleEntries.any { entry ->
+                    if (entry.alreadyRecorded) false
+                    else entry.course.isKindergarten && entry.checked || (!entry.course.isKindergarten && entry.studentCountStr.isNotBlank())
+                }
+            } else {
+                selectedCourseId != null && customParsedDate != null &&
+                (selectedCourse?.isKindergarten == true && customKinderChecked || (selectedCourse?.isKindergarten == false && customStudentCount.isNotBlank()))
             }
             TextButton(
                 onClick = {
-                    val date = parsedDate?.time ?: System.currentTimeMillis()
-                    // Only submit non-recorded entries
-                    onConfirm(date, entries.filter { !it.alreadyRecorded })
+                    if (mode == 0) {
+                        val date = parsedDate?.time ?: System.currentTimeMillis()
+                        onConfirm(date, scheduleEntries.filter { !it.alreadyRecorded }, null)
+                    } else {
+                        val date = customParsedDate?.time ?: System.currentTimeMillis()
+                        val course = selectedCourse!!
+                        val sc = if (course.isKindergarten) 0 else (customStudentCount.toIntOrNull() ?: 0)
+                        val ac = if (course.isKindergarten) 0 else (customAssistantCount.toIntOrNull() ?: 0)
+                        // Build time note
+                        var note: String? = null
+                        if (customStartH.isNotEmpty() || customEndH.isNotEmpty()) {
+                            val sh = customStartH.ifBlank { "00" }.padStart(2, '0')
+                            val sm = customStartM.ifBlank { "00" }.padStart(2, '0')
+                            val eh = customEndH.ifBlank { "00" }.padStart(2, '0')
+                            val em = customEndM.ifBlank { "00" }.padStart(2, '0')
+                            note = "$sh:$sm-$eh:$em"
+                        }
+                        // Create a single DayEntry for VM
+                        val entry = DayEntry(course = course, studentCountStr = sc.toString(), assistantCountStr = ac.toString(), checked = true)
+                        onConfirm(date, listOf(entry), note)
+                    }
                 },
                 enabled = canConfirm,
             ) { Text("确认录入") }
@@ -443,31 +536,43 @@ fun EditAttendanceDialog(
     val isKinder = course?.isKindergarten == true
     var studentCountStr by remember { mutableStateOf(attendance.studentCount.toString()) }
     var assistantCountStr by remember { mutableStateOf(attendance.assistantCount.toString()) }
+    // Parse note as custom time fields
+    val noteParts = attendance.note?.split("-") ?: emptyList()
+    var editStartH by remember { mutableStateOf(if (noteParts.size >= 1) noteParts[0].substringBefore(":").takeIf { it.isNotEmpty() } ?: "" else "") }
+    var editStartM by remember { mutableStateOf(if (noteParts.size >= 1) noteParts[0].substringAfter(":").takeIf { it.isNotEmpty() } ?: "" else "") }
+    var editEndH by remember { mutableStateOf(if (noteParts.size >= 2) noteParts[1].substringBefore(":").takeIf { it.isNotEmpty() } ?: "" else "") }
+    var editEndM by remember { mutableStateOf(if (noteParts.size >= 2) noteParts[1].substringAfter(":").takeIf { it.isNotEmpty() } ?: "" else "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("编辑出勤") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text("课程：${course?.name ?: "未知"}", style = MaterialTheme.typography.bodyLarge)
                 Text("日期：${rememberDateFormat(attendance.date)}", style = MaterialTheme.typography.bodySmall)
                 if (isKinder) {
                     Text("幼儿园课程 ¥55/节", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 } else {
-                    OutlinedTextField(
-                        value = studentCountStr,
-                        onValueChange = { studentCountStr = it.filter { c -> c.isDigit() } },
-                        label = { Text("上课人数") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    OutlinedTextField(
-                        value = assistantCountStr,
-                        onValueChange = { assistantCountStr = it.filter { c -> c.isDigit() } },
-                        label = { Text("助教人数") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    OutlinedTextField(value = studentCountStr, onValueChange = { studentCountStr = it.filter { c -> c.isDigit() } },
+                        label = { Text("上课人数") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = assistantCountStr, onValueChange = { assistantCountStr = it.filter { c -> c.isDigit() } },
+                        label = { Text("助教人数") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                }
+                // Custom time edit
+                HorizontalDivider()
+                Text("自定义时间", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    OutlinedTextField(value = editStartH, onValueChange = { editStartH = it.filter { c -> c.isDigit() }.take(2) },
+                        label = { Text("时") }, singleLine = true, modifier = Modifier.width(56.dp))
+                    Text(":"); OutlinedTextField(value = editStartM, onValueChange = { editStartM = it.filter { c -> c.isDigit() }.take(2) },
+                        label = { Text("分") }, singleLine = true, modifier = Modifier.width(56.dp))
+                    Text("→"); OutlinedTextField(value = editEndH, onValueChange = { editEndH = it.filter { c -> c.isDigit() }.take(2) },
+                        label = { Text("时") }, singleLine = true, modifier = Modifier.width(56.dp))
+                    Text(":"); OutlinedTextField(value = editEndM, onValueChange = { editEndM = it.filter { c -> c.isDigit() }.take(2) },
+                        label = { Text("分") }, singleLine = true, modifier = Modifier.width(56.dp))
                 }
             }
         },
@@ -476,7 +581,15 @@ fun EditAttendanceDialog(
                 onClick = {
                     val count = if (isKinder) 0 else (studentCountStr.toIntOrNull() ?: return@TextButton)
                     val assistant = if (isKinder) 0 else (assistantCountStr.toIntOrNull() ?: 0)
-                    onConfirm(attendance.copy(studentCount = count, assistantCount = assistant))
+                    var newNote: String? = null
+                    if (editStartH.isNotEmpty() || editEndH.isNotEmpty()) {
+                        val sh = editStartH.ifBlank { "00" }.padStart(2, '0')
+                        val sm = editStartM.ifBlank { "00" }.padStart(2, '0')
+                        val eh = editEndH.ifBlank { "00" }.padStart(2, '0')
+                        val em = editEndM.ifBlank { "00" }.padStart(2, '0')
+                        newNote = "$sh:$sm-$eh:$em"
+                    }
+                    onConfirm(attendance.copy(studentCount = count, assistantCount = assistant, note = newNote))
                 },
                 enabled = isKinder || studentCountStr.isNotBlank(),
             ) { Text("保存") }
