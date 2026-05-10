@@ -54,16 +54,16 @@ class SettingsViewModel(private val repo: AppRepository) : ViewModel() {
 
     fun importAll(courses: List<Course>, attendances: List<Attendance>) {
         viewModelScope.launch {
-            // Store old course names for attendance mapping
-            val oldIdToName = repo.getAllCourses().first().associate { it.id to it.name }
+            // Build name lookup from parsed courses — attendance records reference parsed course IDs
+            val parsedIdToName = courses.associate { it.id to it.name }
 
             repo.deleteAllCourses()
             repo.insertCourses(courses)
 
-            // Map attendance to new course IDs by name
+            // Map attendances to new course IDs by matching course name
             val newCourses = repo.getAllCourses().first()
             for (a in attendances) {
-                val courseName = oldIdToName[a.courseId] ?: continue
+                val courseName = parsedIdToName[a.courseId] ?: continue
                 val newCourse = newCourses.find { it.name == courseName }
                 if (newCourse != null) {
                     repo.insertAttendance(a.copy(courseId = newCourse.id))
