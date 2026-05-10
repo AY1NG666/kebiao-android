@@ -137,7 +137,7 @@ fun SettingsScreen(vm: SettingsViewModel) {
             item {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 TextButton(onClick = { showChangelog = true }) {
-                    Text("📋 更新日志  v1.5.3", color = MaterialTheme.colorScheme.primary)
+                    Text("📋 更新日志  v3.0", color = MaterialTheme.colorScheme.primary)
                 }
             }
 
@@ -178,7 +178,7 @@ fun SettingsScreen(vm: SettingsViewModel) {
     // Changelog dialog
     if (showChangelog) {
         val log = listOf(
-            "v1.5.4" to listOf("出勤列表底部留白防FAB遮挡", "自定义出勤已录入课程过滤"),
+            "v3.0" to listOf("两端版本号统一为 3.0", "出勤列表底部留白防FAB遮挡", "自定义出勤按名称去重"),
             "v1.5.3" to listOf("标题固定不随内容滚动", "设置页新增更新日志入口"),
             "v1.5.2" to listOf("工资页新增炎梦分组（蓝色）"),
             "v1.5.1" to listOf("自定义出勤支持修改上课时间", "出勤列表自定义记录显示时间标签"),
