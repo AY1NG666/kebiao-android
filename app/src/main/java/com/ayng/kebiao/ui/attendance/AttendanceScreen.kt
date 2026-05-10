@@ -177,6 +177,8 @@ fun AttendanceScreen(vm: AttendanceViewModel) {
                     }
                 }
             }
+            // Bottom spacer to avoid FAB overlap
+            item { Spacer(Modifier.height(80.dp)) }
         }
     }
 
