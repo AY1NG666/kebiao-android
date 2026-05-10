@@ -136,7 +136,7 @@ fun SettingsScreen(vm: SettingsViewModel) {
             item {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 TextButton(onClick = { showChangelog = true }) {
-                    Text("更新日志  v3.1", color = MaterialTheme.colorScheme.primary)
+                    Text("更新日志  v3.1.1", color = MaterialTheme.colorScheme.primary)
                 }
             }
 
@@ -177,6 +177,7 @@ fun SettingsScreen(vm: SettingsViewModel) {
     // Changelog dialog
     if (showChangelog) {
         val log = listOf(
+            "v3.1.1" to listOf("修复导入CSV出勤全链到同一课程", "还原Indigo主题", "APK自动带版本号"),
             "v3.1" to listOf("修复 Color.parseColor 崩溃", "修复周历 locale 兼容", "修复工资加载静默失败", "修复 Excel 误导入", "UI 升级暖橙主题", "清理废弃代码"),
             "v3.0" to listOf("两端版本号统一为 3.0", "出勤列表底部留白防FAB遮挡", "自定义出勤按名称去重"),
             "v1.5.3" to listOf("标题固定不随内容滚动", "设置页新增更新日志入口"),
