@@ -22,8 +22,8 @@ object ExcelParser {
         val fileName = getFileName(context, uri) ?: ""
         return when {
             fileName.endsWith(".csv") -> parseCsv(context, uri)
-            fileName.endsWith(".xlsx") || fileName.endsWith(".xls") -> parseCsv(context, uri)
-            else -> ParseResult(emptyList(), emptyList(), listOf("不支持的文件格式：$fileName"), emptyList())
+            fileName.endsWith(".xlsx") || fileName.endsWith(".xls") -> ParseResult(emptyList(), emptyList(), listOf("不支持 Excel 文件，请用 CSV 格式重新导入"), emptyList())
+            else -> ParseResult(emptyList(), emptyList(), listOf("不支持的文件格式：$fileName，请使用 CSV 文件"), emptyList())
         }
     }
 

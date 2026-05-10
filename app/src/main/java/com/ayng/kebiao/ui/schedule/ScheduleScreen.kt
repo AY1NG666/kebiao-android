@@ -222,8 +222,9 @@ fun ScheduleScreen(vm: ScheduleViewModel) {
                     }
                 } else {
                     items(dayCourses, key = { it.id }) { course ->
-                        val courseColor = if (course.colorHex.isNotBlank()) Color(android.graphics.Color.parseColor(course.colorHex)) else if (course.isKindergarten) Secondary else Tertiary
-                        val courseBg = if (course.colorHex.isNotBlank()) Color(android.graphics.Color.parseColor(course.colorHex)).copy(alpha = 0.12f) else if (course.isKindergarten) SecondaryContainer else TertiaryContainer
+                        val parsedColor = remember(course.colorHex) { parseColorSafe(course.colorHex) }
+                        val courseColor = parsedColor ?: if (course.isKindergarten) Secondary else Tertiary
+                        val courseBg = (parsedColor?.copy(alpha = 0.12f)) ?: if (course.isKindergarten) SecondaryContainer else TertiaryContainer
 
                         Card(
                             modifier = Modifier
@@ -309,4 +310,13 @@ fun ScheduleScreen(vm: ScheduleViewModel) {
 private fun rememberDateFormat(millis: Long): String {
     val fmt = remember { SimpleDateFormat("MM/dd", Locale.CHINESE) }
     return fmt.format(Date(millis))
+}
+
+private fun parseColorSafe(hex: String): Color? {
+    if (hex.isBlank()) return null
+    return try {
+        Color(android.graphics.Color.parseColor(hex))
+    } catch (_: IllegalArgumentException) {
+        null
+    }
 }

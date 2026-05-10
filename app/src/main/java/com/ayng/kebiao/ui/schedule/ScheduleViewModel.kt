@@ -3,13 +3,11 @@ package com.ayng.kebiao.ui.schedule
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.ayng.kebiao.data.db.entity.Attendance
 import com.ayng.kebiao.data.db.entity.Course
 import com.ayng.kebiao.data.repository.AppRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import java.util.Calendar
 
 class ScheduleViewModel(private val repo: AppRepository) : ViewModel() {
@@ -19,12 +17,6 @@ class ScheduleViewModel(private val repo: AppRepository) : ViewModel() {
 
     /** Current week offset: 0 = this week, -1 = last week, +1 = next week */
     val currentWeekOffset = kotlinx.coroutines.flow.MutableStateFlow(0)
-
-    fun recordAttendance(courseId: Long, date: Long, studentCount: Int, assistantCount: Int = 0, note: String? = null) {
-        viewModelScope.launch {
-            repo.insertAttendance(Attendance(courseId = courseId, date = date, studentCount = studentCount, assistantCount = assistantCount, note = note))
-        }
-    }
 
     fun addCourse(name: String, location: String, dayOfWeek: Int, startTime: String, endTime: String, durationHours: Float, isKindergarten: Boolean = false, colorHex: String = "") {
         viewModelScope.launch {
@@ -49,19 +41,16 @@ class ScheduleViewModel(private val repo: AppRepository) : ViewModel() {
 
     fun getMondayOfWeek(weekOffset: Int): Calendar {
         val cal = Calendar.getInstance()
-        cal.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+        // Calculate Monday relative to current day, locale-independent
+        val currentDay = cal.get(Calendar.DAY_OF_WEEK)
+        val daysSinceMonday = (currentDay - Calendar.MONDAY + 7) % 7
+        cal.add(Calendar.DAY_OF_WEEK, -daysSinceMonday)
         cal.set(Calendar.HOUR_OF_DAY, 0)
         cal.set(Calendar.MINUTE, 0)
         cal.set(Calendar.SECOND, 0)
         cal.set(Calendar.MILLISECOND, 0)
         cal.add(Calendar.WEEK_OF_YEAR, weekOffset)
         return cal
-    }
-
-    fun getDateForDay(weekOffset: Int, dayOfWeek: Int): Long {
-        val cal = getMondayOfWeek(weekOffset)
-        cal.add(Calendar.DAY_OF_WEEK, dayOfWeek - Calendar.MONDAY)
-        return cal.timeInMillis
     }
 
     fun monthLabel(weekOffset: Int): String {

@@ -12,8 +12,8 @@ android {
         applicationId = "com.ayng.kebiao"
         minSdk = 26
         targetSdk = 34
-        versionCode = 31
-        versionName = "3.0.1"
+        versionCode = 32
+        versionName = "3.1"
     }
 
     buildTypes {

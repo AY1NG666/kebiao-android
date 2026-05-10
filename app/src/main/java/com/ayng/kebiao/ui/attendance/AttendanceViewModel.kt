@@ -9,7 +9,6 @@ import com.ayng.kebiao.data.repository.AppRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -82,15 +81,6 @@ class AttendanceViewModel(private val repo: AppRepository) : ViewModel() {
 
     fun getCourseName(courseId: Long): String {
         return courses.value.find { it.id == courseId }?.name ?: "未知课程"
-    }
-
-    /** Total classes taught this month */
-    val monthlyClassCount: StateFlow<Int> = _attendances.let { flow ->
-        MutableStateFlow(flow.value.size).also { st ->
-            viewModelScope.launch {
-                flow.collect { st.value = it.size }
-            }
-        }
     }
 
     private fun loadMonth() {

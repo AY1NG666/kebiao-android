@@ -69,6 +69,11 @@ class AppRepository(
         bumpVersion()
     }
 
+    suspend fun deleteAllAttendances() {
+        attendanceDao.deleteAll()
+        bumpVersion()
+    }
+
     // ── Salary Rules ──
 
     fun getAllSalaryRules(): Flow<List<SalaryRule>> = salaryRuleDao.getAll()

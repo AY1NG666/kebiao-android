@@ -44,6 +44,7 @@ import java.util.Locale
 @Composable
 fun SalaryScreen(vm: SalaryViewModel) {
     val breakdown by vm.breakdown.collectAsState()
+    val error by vm.error.collectAsState()
     val year by vm.currentYear.collectAsState()
     val month by vm.currentMonth.collectAsState()
 
@@ -85,6 +86,20 @@ fun SalaryScreen(vm: SalaryViewModel) {
                 .padding(horizontal = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // Error message
+            error?.let { msg ->
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    ) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(msg, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                        }
+                    }
+                }
+            }
+
             // Total salary card
             item {
                 Card(

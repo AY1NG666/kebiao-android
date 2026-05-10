@@ -1,5 +1,13 @@
 # 课表 App 更新日志
 
+## v3.1 (2026-05-11)
+- 🎨 UI 升级暖橙主题色系
+- 🐛 修复 Color.parseColor 非法 hex 崩溃
+- 🐛 修复周历 locale 导致日期偏移
+- 🐛 修复工资加载失败静默吞错
+- 🐛 修复 Excel 文件被当 CSV 解析
+- 🧹 清理废弃代码 (recordAttendance, monthlyClassCount, @Update)
+
 ## v1.9 (2026-05-08)
 - 🎨 更新 App 图标（用户自定义图标）
 - 🔧 修复图标引用路径

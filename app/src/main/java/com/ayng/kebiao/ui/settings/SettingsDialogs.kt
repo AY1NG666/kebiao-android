@@ -37,41 +37,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ayng.kebiao.data.db.entity.SalaryRule
-
-@Composable
-fun AddSalaryRuleDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (SalaryRule) -> Unit,
-) {
-    var minStr by remember { mutableStateOf("") }
-    var maxStr by remember { mutableStateOf("") }
-    var rateStr by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("添加薪资档位") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = minStr, onValueChange = { minStr = it.filter { c -> c.isDigit() } }, label = { Text("最少人数") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = maxStr, onValueChange = { maxStr = it.filter { c -> c.isDigit() } }, label = { Text("最多人数（留空表示无上限）") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = rateStr, onValueChange = { rateStr = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("课时费（元/节）") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val min = minStr.toIntOrNull() ?: return@TextButton
-                    val max = maxStr.toIntOrNull()
-                    val rate = rateStr.toDoubleOrNull() ?: return@TextButton
-                    onConfirm(SalaryRule(minStudents = min, maxStudents = max, ratePerClass = rate))
-                },
-                enabled = minStr.isNotBlank() && rateStr.isNotBlank(),
-            ) { Text("添加") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-    )
-}
-
 private fun calcDuration(start: String, end: String): String {
     try {
         fun parse(parts: List<String>): Int {

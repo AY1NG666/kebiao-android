@@ -15,32 +15,8 @@ import kotlinx.coroutines.launch
 
 class SettingsViewModel(private val repo: AppRepository) : ViewModel() {
 
-    val salaryRules: StateFlow<List<SalaryRule>> = repo.getAllSalaryRules()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
     val courses: StateFlow<List<Course>> = repo.getAllCourses()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    fun updateSalaryRule(rule: SalaryRule) {
-        viewModelScope.launch { repo.updateSalaryRule(rule) }
-    }
-
-    fun addSalaryRule(rule: SalaryRule) {
-        viewModelScope.launch { repo.insertSalaryRule(rule) }
-    }
-
-    fun deleteSalaryRule(id: Long) {
-        viewModelScope.launch { repo.deleteSalaryRule(id) }
-    }
-
-    fun resetSalaryRules() {
-        viewModelScope.launch {
-            repo.deleteAllSalaryRules()
-            repo.insertSalaryRule(SalaryRule(minStudents = 0, maxStudents = 4, ratePerClass = 100.0))
-            repo.insertSalaryRule(SalaryRule(minStudents = 5, maxStudents = 10, ratePerClass = 150.0))
-            repo.insertSalaryRule(SalaryRule(minStudents = 11, maxStudents = null, ratePerClass = 200.0))
-        }
-    }
 
     // Course management
     fun addCourse(name: String, location: String, dayOfWeek: Int, startTime: String, endTime: String, durationHours: Float, isKindergarten: Boolean = false, colorHex: String = "") {
@@ -131,9 +107,11 @@ class SettingsViewModel(private val repo: AppRepository) : ViewModel() {
 
     fun clearAllData() {
         viewModelScope.launch {
-            repo.deleteAllCourses()
-            // Clear all attendance and rules too
-            // This is a simplified version — a production app would have proper cascade
+            repo.deleteAllCourses()  // cascades to attendances via FK
+            repo.deleteAllSalaryRules()
+            repo.insertSalaryRule(SalaryRule(minStudents = 0, maxStudents = 5, ratePerClass = 35.0))
+            repo.insertSalaryRule(SalaryRule(minStudents = 6, maxStudents = 10, ratePerClass = 50.0))
+            repo.insertSalaryRule(SalaryRule(minStudents = 11, maxStudents = null, ratePerClass = 70.0))
         }
     }
 

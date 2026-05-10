@@ -19,6 +19,9 @@ class SalaryViewModel(private val repo: AppRepository) : ViewModel() {
     private val _breakdown = MutableStateFlow<SalaryBreakdown?>(null)
     val breakdown: StateFlow<SalaryBreakdown?> = _breakdown
 
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error
+
     // Track last known data version to avoid unnecessary reloads
     private var lastVersion = -1
 
@@ -49,9 +52,11 @@ class SalaryViewModel(private val repo: AppRepository) : ViewModel() {
                 _breakdown.value = SalaryBreakdown(currentYear.value, currentMonth.value, -1.0, 0, emptyList())
             }
             try {
+                _error.value = null
                 _breakdown.value = repo.calculateMonthlySalary(currentYear.value, currentMonth.value)
-            } catch (_: Exception) {
-                // keep old data on error
+            } catch (e: Exception) {
+                if (_breakdown.value?.total == -1.0) _breakdown.value = null
+                _error.value = "加载失败：${e.message}"
             }
         }
     }

@@ -5,7 +5,6 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import androidx.room.Update
 import com.ayng.kebiao.data.db.entity.Course
 import kotlinx.coroutines.flow.Flow
 
@@ -23,9 +22,6 @@ interface CourseDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(courses: List<Course>)
-
-    @Update
-    suspend fun update(course: Course)
 
     @Delete
     suspend fun delete(course: Course)
