@@ -418,7 +418,7 @@ fun RecordAttendanceDialog(
                     )
 
                     Text("选择课程", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    courses.forEach { course ->
+                    courses.distinctBy { it.name }.forEach { course ->
                         Card(
                             modifier = Modifier.fillMaxWidth().clickable {
                                 selectedCourseId = course.id
