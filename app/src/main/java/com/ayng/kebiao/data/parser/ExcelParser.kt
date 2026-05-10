@@ -32,6 +32,7 @@ object ExcelParser {
         val attendances = mutableListOf<Attendance>()
         val errors = mutableListOf<String>()
         val warnings = mutableListOf<String>()
+        var tempCourseId = 1L  // temporary unique IDs for linking attendances to courses
 
         try {
             val reader = BufferedReader(InputStreamReader(context.contentResolver.openInputStream(uri), "UTF-8"))
@@ -85,7 +86,7 @@ object ExcelParser {
                                 } else false
                                 val colorHex = if (cols.size >= 8) cols[7] else ""
 
-                                courses.add(Course(name = name, location = location, dayOfWeek = dayOfWeek, startTime = startTime, endTime = endTime, durationHours = durationHours, isKindergarten = isKindergarten, colorHex = colorHex))
+                                courses.add(Course(id = tempCourseId++, name = name, location = location, dayOfWeek = dayOfWeek, startTime = startTime, endTime = endTime, durationHours = durationHours, isKindergarten = isKindergarten, colorHex = colorHex))
                             } catch (_: NumberFormatException) {
                                 warnings.add("第${lineNum}行：数字格式错误，已跳过")
                             }
