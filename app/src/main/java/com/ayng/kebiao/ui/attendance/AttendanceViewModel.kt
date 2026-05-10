@@ -49,15 +49,17 @@ class AttendanceViewModel(private val repo: AppRepository) : ViewModel() {
         }
     }
 
-    /** Custom mode: single entry with optional note (custom time) */
-    fun recordDayAttendanceCustom(date: Long, entries: List<DayEntry>, note: String?) {
+    /** Custom mode: single entry, skips 0-student non-kindergarten */
+    fun recordDayAttendanceCustom(date: Long, entries: List<DayEntry>) {
         viewModelScope.launch {
             for (entry in entries) {
                 if (entry.course.isKindergarten && !entry.checked) continue
                 val count = if (entry.course.isKindergarten) 0 else (entry.studentCountStr.toIntOrNull() ?: 0)
+                // Skip non-kindergarten courses with 0 students
+                if (!entry.course.isKindergarten && count <= 0) continue
                 val assistant = if (entry.course.isKindergarten) 0 else (entry.assistantCountStr.toIntOrNull() ?: 0)
                 repo.insertAttendance(
-                    Attendance(courseId = entry.course.id, date = date, studentCount = count, assistantCount = assistant, note = note)
+                    Attendance(courseId = entry.course.id, date = date, studentCount = count, assistantCount = assistant)
                 )
             }
             loadMonth()

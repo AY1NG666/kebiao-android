@@ -62,6 +62,7 @@ fun SettingsScreen(vm: SettingsViewModel) {
     val courses by vm.courses.collectAsState()
     var showAddCourseDialog by remember { mutableStateOf(false) }
     var editingCourse by remember { mutableStateOf<com.ayng.kebiao.data.db.entity.Course?>(null) }
+    var showChangelog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("设置") }) }
@@ -130,6 +131,14 @@ fun SettingsScreen(vm: SettingsViewModel) {
                 }
             }
 
+            // Changelog
+            item {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                TextButton(onClick = { showChangelog = true }) {
+                    Text("📋 更新日志  v1.5.3", color = MaterialTheme.colorScheme.primary)
+                }
+            }
+
             // Bottom spacer
             item { Spacer(Modifier.height(72.dp)) }
         }
@@ -161,6 +170,36 @@ fun SettingsScreen(vm: SettingsViewModel) {
                 vm.updateCourse(course.id, name, location, day, start, end, duration, isKinder, color)
                 editingCourse = null
             },
+        )
+        }
+
+    // Changelog dialog
+    if (showChangelog) {
+        val log = listOf(
+            "v1.5.3" to listOf("标题固定不随内容滚动", "设置页新增更新日志入口"),
+            "v1.5.2" to listOf("工资页新增炎梦分组（蓝色）"),
+            "v1.5.1" to listOf("自定义出勤支持修改上课时间", "出勤列表自定义记录显示时间标签"),
+            "v1.5.0" to listOf("录入页新增课表/自定义双模式切换", "自定义模式解决补课调课问题"),
+            "v1.4.0" to listOf("新增应用图标", "出勤卡片删除按钮"),
+            "v1.3.0" to listOf("修复出勤记录无法删除"),
+            "v1.2.x" to listOf("导入功能全面修复(iCloud/编码/UTType)", "工资动画对齐Android", "课表手势修复"),
+            "v1.1.0" to listOf("课程卡片纯展示", "日期滑动切周", "出勤自动识别日期", "工资页简约设计", "设置页卡片化"),
+        )
+        AlertDialog(
+            onDismissRequest = { showChangelog = false },
+            title = { Text("更新日志") },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    log.forEach { (ver, items) ->
+                        Text(ver, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall)
+                        items.forEach { item ->
+                            Text("  • $item", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showChangelog = false }) { Text("关闭") } }
         )
     }
 }

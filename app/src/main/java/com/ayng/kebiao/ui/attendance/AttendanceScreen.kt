@@ -186,8 +186,8 @@ fun AttendanceScreen(vm: AttendanceViewModel) {
             courses = courses,
             existingAttendances = attendances,
             onDismiss = { showRecordDialog = false },
-            onConfirm = { date, entries, note ->
-                vm.recordDayAttendanceCustom(date, entries, note)
+            onConfirm = { date, entries ->
+                vm.recordDayAttendanceCustom(date, entries)
                 showRecordDialog = false
             },
         )
@@ -270,7 +270,7 @@ fun RecordAttendanceDialog(
     courses: List<com.ayng.kebiao.data.db.entity.Course>,
     existingAttendances: List<Attendance>,
     onDismiss: () -> Unit,
-    onConfirm: (date: Long, entries: List<DayEntry>, note: String?) -> Unit,
+    onConfirm: (date: Long, entries: List<DayEntry>) -> Unit,
 ) {
     var mode by remember { mutableStateOf(0) } // 0=课表, 1=自定义
 
@@ -313,10 +313,6 @@ fun RecordAttendanceDialog(
     var customStudentCount by remember { mutableStateOf("") }
     var customAssistantCount by remember { mutableStateOf("0") }
     var customKinderChecked by remember { mutableStateOf(false) }
-    var customStartH by remember { mutableStateOf("") }
-    var customStartM by remember { mutableStateOf("") }
-    var customEndH by remember { mutableStateOf("") }
-    var customEndM by remember { mutableStateOf("") }
 
     val selectedCourse = courses.find { it.id == selectedCourseId }
 
@@ -445,7 +441,7 @@ fun RecordAttendanceDialog(
 
                     if (selectedCourse != null) {
                         HorizontalDivider()
-                        if (selectedCourse!!.isKindergarten) {
+                        if (selectedCourse.isKindergarten) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("到课（¥55/节）", style = MaterialTheme.typography.bodyMedium)
                                 Switch(checked = customKinderChecked, onCheckedChange = { customKinderChecked = it })
@@ -457,19 +453,6 @@ fun RecordAttendanceDialog(
                                 OutlinedTextField(value = customAssistantCount, onValueChange = { customAssistantCount = it.filter { c -> c.isDigit() } },
                                     label = { Text("助教") }, singleLine = true, modifier = Modifier.weight(1f))
                             }
-                        }
-                        // Custom time
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("时间", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            OutlinedTextField(value = customStartH, onValueChange = { customStartH = it.filter { c -> c.isDigit() }.take(2) },
-                                label = { Text("时") }, singleLine = true, modifier = Modifier.width(56.dp))
-                            Text(":"); OutlinedTextField(value = customStartM, onValueChange = { customStartM = it.filter { c -> c.isDigit() }.take(2) },
-                                label = { Text("分") }, singleLine = true, modifier = Modifier.width(56.dp))
-                            Text("→"); OutlinedTextField(value = customEndH, onValueChange = { customEndH = it.filter { c -> c.isDigit() }.take(2) },
-                                label = { Text("时") }, singleLine = true, modifier = Modifier.width(56.dp))
-                            Text(":"); OutlinedTextField(value = customEndM, onValueChange = { customEndM = it.filter { c -> c.isDigit() }.take(2) },
-                                label = { Text("分") }, singleLine = true, modifier = Modifier.width(56.dp))
-                            Text("留空=原课时间", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                         }
                     }
                 }
@@ -489,24 +472,17 @@ fun RecordAttendanceDialog(
                 onClick = {
                     if (mode == 0) {
                         val date = parsedDate?.time ?: System.currentTimeMillis()
-                        onConfirm(date, scheduleEntries.filter { !it.alreadyRecorded }, null)
+                        // Skip entries with 0 students for non-kindergarten courses
+                        val valid = scheduleEntries.filter { !it.alreadyRecorded && (it.course.isKindergarten && it.checked || !it.course.isKindergarten && it.studentCountStr.isNotBlank() && (it.studentCountStr.toIntOrNull() ?: 0) > 0) }
+                        onConfirm(date, valid)
                     } else {
                         val date = customParsedDate?.time ?: System.currentTimeMillis()
                         val course = selectedCourse!!
                         val sc = if (course.isKindergarten) 0 else (customStudentCount.toIntOrNull() ?: 0)
                         val ac = if (course.isKindergarten) 0 else (customAssistantCount.toIntOrNull() ?: 0)
-                        // Build time note
-                        var note: String? = null
-                        if (customStartH.isNotEmpty() || customEndH.isNotEmpty()) {
-                            val sh = customStartH.ifBlank { "00" }.padStart(2, '0')
-                            val sm = customStartM.ifBlank { "00" }.padStart(2, '0')
-                            val eh = customEndH.ifBlank { "00" }.padStart(2, '0')
-                            val em = customEndM.ifBlank { "00" }.padStart(2, '0')
-                            note = "$sh:$sm-$eh:$em"
-                        }
-                        // Create a single DayEntry for VM
+                        // Don't record if non-kindergarten with 0 students
                         val entry = DayEntry(course = course, studentCountStr = sc.toString(), assistantCountStr = ac.toString(), checked = true)
-                        onConfirm(date, listOf(entry), note)
+                        onConfirm(date, listOf(entry))
                     }
                 },
                 enabled = canConfirm,
@@ -536,12 +512,6 @@ fun EditAttendanceDialog(
     val isKinder = course?.isKindergarten == true
     var studentCountStr by remember { mutableStateOf(attendance.studentCount.toString()) }
     var assistantCountStr by remember { mutableStateOf(attendance.assistantCount.toString()) }
-    // Parse note as custom time fields
-    val noteParts = attendance.note?.split("-") ?: emptyList()
-    var editStartH by remember { mutableStateOf(if (noteParts.size >= 1) noteParts[0].substringBefore(":").takeIf { it.isNotEmpty() } ?: "" else "") }
-    var editStartM by remember { mutableStateOf(if (noteParts.size >= 1) noteParts[0].substringAfter(":").takeIf { it.isNotEmpty() } ?: "" else "") }
-    var editEndH by remember { mutableStateOf(if (noteParts.size >= 2) noteParts[1].substringBefore(":").takeIf { it.isNotEmpty() } ?: "" else "") }
-    var editEndM by remember { mutableStateOf(if (noteParts.size >= 2) noteParts[1].substringAfter(":").takeIf { it.isNotEmpty() } ?: "" else "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -561,19 +531,6 @@ fun EditAttendanceDialog(
                     OutlinedTextField(value = assistantCountStr, onValueChange = { assistantCountStr = it.filter { c -> c.isDigit() } },
                         label = { Text("助教人数") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 }
-                // Custom time edit
-                HorizontalDivider()
-                Text("自定义时间", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    OutlinedTextField(value = editStartH, onValueChange = { editStartH = it.filter { c -> c.isDigit() }.take(2) },
-                        label = { Text("时") }, singleLine = true, modifier = Modifier.width(56.dp))
-                    Text(":"); OutlinedTextField(value = editStartM, onValueChange = { editStartM = it.filter { c -> c.isDigit() }.take(2) },
-                        label = { Text("分") }, singleLine = true, modifier = Modifier.width(56.dp))
-                    Text("→"); OutlinedTextField(value = editEndH, onValueChange = { editEndH = it.filter { c -> c.isDigit() }.take(2) },
-                        label = { Text("时") }, singleLine = true, modifier = Modifier.width(56.dp))
-                    Text(":"); OutlinedTextField(value = editEndM, onValueChange = { editEndM = it.filter { c -> c.isDigit() }.take(2) },
-                        label = { Text("分") }, singleLine = true, modifier = Modifier.width(56.dp))
-                }
             }
         },
         confirmButton = {
@@ -581,15 +538,7 @@ fun EditAttendanceDialog(
                 onClick = {
                     val count = if (isKinder) 0 else (studentCountStr.toIntOrNull() ?: return@TextButton)
                     val assistant = if (isKinder) 0 else (assistantCountStr.toIntOrNull() ?: 0)
-                    var newNote: String? = null
-                    if (editStartH.isNotEmpty() || editEndH.isNotEmpty()) {
-                        val sh = editStartH.ifBlank { "00" }.padStart(2, '0')
-                        val sm = editStartM.ifBlank { "00" }.padStart(2, '0')
-                        val eh = editEndH.ifBlank { "00" }.padStart(2, '0')
-                        val em = editEndM.ifBlank { "00" }.padStart(2, '0')
-                        newNote = "$sh:$sm-$eh:$em"
-                    }
-                    onConfirm(attendance.copy(studentCount = count, assistantCount = assistant, note = newNote))
+                    onConfirm(attendance.copy(studentCount = count, assistantCount = assistant))
                 },
                 enabled = isKinder || studentCountStr.isNotBlank(),
             ) { Text("保存") }
