@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.ayng.kebiao.data.db.entity.Attendance
 import com.ayng.kebiao.data.db.entity.Course
+import com.ayng.kebiao.data.db.entity.DEFAULT_KINDERGARTEN_RATE
 import com.ayng.kebiao.data.db.entity.SalaryRule
 import com.ayng.kebiao.data.repository.AppRepository
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,18 +20,18 @@ class SettingsViewModel(private val repo: AppRepository) : ViewModel() {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Course management
-    fun addCourse(name: String, location: String, dayOfWeek: Int, startTime: String, endTime: String, durationHours: Float, isKindergarten: Boolean = false, colorHex: String = "") {
+    fun addCourse(name: String, location: String, dayOfWeek: Int, startTime: String, endTime: String, durationHours: Float, isKindergarten: Boolean = false, kindergartenRate: Double = DEFAULT_KINDERGARTEN_RATE, colorHex: String = "") {
         viewModelScope.launch {
             repo.insertCourse(
-                Course(name = name, location = location, dayOfWeek = dayOfWeek, startTime = startTime, endTime = endTime, durationHours = durationHours, isKindergarten = isKindergarten, colorHex = colorHex)
+                Course(name = name, location = location, dayOfWeek = dayOfWeek, startTime = startTime, endTime = endTime, durationHours = durationHours, isKindergarten = isKindergarten, kindergartenRate = kindergartenRate, colorHex = colorHex)
             )
         }
     }
 
-    fun updateCourse(id: Long, name: String, location: String, dayOfWeek: Int, startTime: String, endTime: String, durationHours: Float, isKindergarten: Boolean, colorHex: String) {
+    fun updateCourse(id: Long, name: String, location: String, dayOfWeek: Int, startTime: String, endTime: String, durationHours: Float, isKindergarten: Boolean, kindergartenRate: Double, colorHex: String) {
         viewModelScope.launch {
-            repo.insertCourse(
-                Course(id = id, name = name, location = location, dayOfWeek = dayOfWeek, startTime = startTime, endTime = endTime, durationHours = durationHours, isKindergarten = isKindergarten, colorHex = colorHex)
+            repo.updateCourse(
+                Course(id = id, name = name, location = location, dayOfWeek = dayOfWeek, startTime = startTime, endTime = endTime, durationHours = durationHours, isKindergarten = isKindergarten, kindergartenRate = kindergartenRate, colorHex = colorHex)
             )
         }
     }
@@ -47,8 +48,7 @@ class SettingsViewModel(private val repo: AppRepository) : ViewModel() {
     // Import
     fun importCourses(courses: List<Course>) {
         viewModelScope.launch {
-            repo.deleteAllCourses()
-            repo.insertCourses(courses)
+            repo.importCoursesPreservingAttendance(courses)
         }
     }
 
@@ -78,31 +78,32 @@ class SettingsViewModel(private val repo: AppRepository) : ViewModel() {
         appendLine()
 
         appendLine("--- 课程表 ---")
-        appendLine("课程名称,上课地点,星期,开始时间,结束时间,课时,幼儿园,颜色")
+        appendLine("课程名称,上课地点,星期,开始时间,结束时间,课时,幼儿园,颜色,幼儿园金额")
         val courses = repo.getAllCourses().first()
         for (c in courses) {
             val dayLabel = when(c.dayOfWeek) { 1->"周一"; 2->"周二"; 3->"周三"; 4->"周四"; 5->"周五"; 6->"周六"; else->"周日" }
-            appendLine("${c.name},${c.location},$dayLabel,${c.startTime},${c.endTime},${c.durationHours},${if (c.isKindergarten) "是" else "否"},${c.colorHex}")
+            val kindergartenRate = if (c.isKindergarten) formatRate(c.effectiveKindergartenRate) else ""
+            appendLine(csvRow(listOf(c.name, c.location, dayLabel, c.startTime, c.endTime, c.durationHours.toString(), if (c.isKindergarten) "是" else "否", c.colorHex, kindergartenRate)))
         }
         appendLine()
 
         appendLine("--- 出勤记录 ---")
-        appendLine("日期,课程名称,地点,学生人数,助教人数,课时费,类型")
+        appendLine("日期,课程名称,地点,学生人数,助教人数,课时费,类型,备注")
         val attendances = repo.getAllAttendance().first()
         val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.CHINESE)
         var totalSalary = 0.0
         for (a in attendances.sortedBy { it.date }) {
             val course = courses.find { it.id == a.courseId }
-            val rate = if (course?.isKindergarten == true) 55.0 else a.studentCount * 7.0 + a.assistantCount * 3.0
+            val rate = if (course?.isKindergarten == true) course.effectiveKindergartenRate else a.studentCount * 7.0 + a.assistantCount * 3.0
             totalSalary += rate
-            appendLine("${sdf.format(java.util.Date(a.date))},${course?.name ?: "未知"},${course?.location ?: ""},${a.studentCount},${a.assistantCount},${"%.2f".format(rate)},${if (course?.isKindergarten == true) "幼儿园" else "超能星球"}")
+            appendLine(csvRow(listOf(sdf.format(java.util.Date(a.date)), course?.name ?: "未知", course?.location ?: "", a.studentCount.toString(), a.assistantCount.toString(), String.format(java.util.Locale.ROOT, "%.2f", rate), if (course?.isKindergarten == true) "幼儿园" else "超能星球", a.note.orEmpty())))
         }
         appendLine()
 
         appendLine("--- 汇总 ---")
         appendLine("总课程数,${courses.size}")
         appendLine("总出勤记录,${attendances.size}")
-        appendLine("课时费合计,${"%.2f".format(totalSalary)}")
+        appendLine("课时费合计,${String.format(java.util.Locale.ROOT, "%.2f", totalSalary)}")
     }
 
     fun clearAllData() {
@@ -120,3 +121,11 @@ class SettingsViewModel(private val repo: AppRepository) : ViewModel() {
         override fun <T : ViewModel> create(modelClass: Class<T>): T = SettingsViewModel(repo) as T
     }
 }
+
+private fun csvRow(fields: List<String>): String {
+    return fields.joinToString(",") { field ->
+        "\"${field.replace("\"", "\"\"")}\""
+    }
+}
+
+private fun formatRate(value: Double): String = String.format(java.util.Locale.ROOT, "%.2f", value)

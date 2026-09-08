@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -37,33 +39,31 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ayng.kebiao.data.validation.isValidTimeRange
+import com.ayng.kebiao.data.validation.parseTimeMinutes
+import com.ayng.kebiao.data.db.entity.DEFAULT_KINDERGARTEN_RATE
+import com.ayng.kebiao.ui.parseColorSafe
+
 private fun calcDuration(start: String, end: String): String {
-    try {
-        fun parse(parts: List<String>): Int {
-            val h = parts.getOrNull(0)?.toIntOrNull() ?: return -1
-            val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
-            return h * 60 + m
-        }
-        val s = parse(start.split(":"))
-        val e = parse(end.split(":"))
-        if (s < 0 || e < 0) return ""
-        val diff = if (e > s) e - s else e + 24 * 60 - s
-        val hours = diff / 60f
-        return if (hours == hours.toInt().toFloat()) "${hours.toInt()}" else "%.1f".format(hours)
-    } catch (_: Exception) { return "" }
+    val startMinutes = parseTimeMinutes(start) ?: return ""
+    val endMinutes = parseTimeMinutes(end) ?: return ""
+    if (endMinutes <= startMinutes) return ""
+    val hours = (endMinutes - startMinutes) / 60f
+    return if (hours == hours.toInt().toFloat()) "${hours.toInt()}" else "%.1f".format(hours)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AddCourseDialog(
     onDismiss: () -> Unit,
-    onConfirm: (name: String, location: String, dayOfWeek: Int, startTime: String, endTime: String, durationHours: Float, isKindergarten: Boolean, colorHex: String) -> Unit,
+    onConfirm: (name: String, location: String, dayOfWeek: Int, startTime: String, endTime: String, durationHours: Float, isKindergarten: Boolean, kindergartenRate: Double, colorHex: String) -> Unit,
     initialName: String = "",
-    initialLocation: String = "欧阳修",
+    initialLocation: String = "",
     initialDay: Int = 1,
     initialStart: String = "",
     initialEnd: String = "",
     initialKinder: Boolean = false,
+    initialKindergartenRate: Double = DEFAULT_KINDERGARTEN_RATE,
     initialColor: String = "",
 ) {
     var name by remember { mutableStateOf(initialName) }
@@ -74,30 +74,39 @@ fun AddCourseDialog(
     var endH by remember { mutableStateOf(if (initialEnd.length >= 2) initialEnd.substring(0, 2) else "") }
     var endM by remember { mutableStateOf(if (initialEnd.length >= 5) initialEnd.substring(3, 5) else "") }
     var isKindergarten by remember { mutableStateOf(initialKinder) }
+    var kindergartenRateText by remember { mutableStateOf(formatCourseRate(initialKindergartenRate)) }
     var selectedColor by remember { mutableStateOf(initialColor) }
     var showColorPalette by remember { mutableStateOf(false) }
 
     val days = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
-    val locations = listOf("欧阳修", "木马森林", "万达")
-
 
     val startTime = if (startH.isNotBlank()) "${startH.padStart(2, '0')}:${startM.padStart(2, '0')}" else ""
     val endTime = if (endH.isNotBlank()) "${endH.padStart(2, '0')}:${endM.padStart(2, '0')}" else ""
     val durationStr = remember(startTime, endTime) { calcDuration(startTime, endTime) }
+    val validTime = startH.isNotBlank() && startM.isNotBlank() &&
+        endH.isNotBlank() && endM.isNotBlank() &&
+        isValidTimeRange(startTime, endTime)
+    val kindergartenRate = kindergartenRateText.toDoubleOrNull()
+    val validKindergartenRate = !isKindergarten || (kindergartenRate?.isFinite() == true && kindergartenRate > 0.0)
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initialName.isBlank()) "添加课程" else "编辑课程") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("课程名称") }, singleLine = true, modifier = Modifier.fillMaxWidth())
 
-                Text("上课地点", style = MaterialTheme.typography.bodySmall)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    locations.forEach { loc ->
-                        FilterChip(selected = location == loc, onClick = { location = loc }, label = { Text(loc) })
-                    }
-                }
+                OutlinedTextField(
+                    value = location,
+                    onValueChange = { location = it },
+                    label = { Text("上课地点") },
+                    placeholder = { Text("例如：欧阳修、木马森林或自定义地点") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
 
                 Text("星期", style = MaterialTheme.typography.bodySmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -134,16 +143,35 @@ fun AddCourseDialog(
                 )
 
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("幼儿园课程（固定55元/节）", style = MaterialTheme.typography.bodyMedium)
+                    Text("幼儿园课程", style = MaterialTheme.typography.bodyMedium)
                     Switch(checked = isKindergarten, onCheckedChange = { isKindergarten = it })
+                }
+
+                if (isKindergarten) {
+                    OutlinedTextField(
+                        value = kindergartenRateText,
+                        onValueChange = { value ->
+                            if (value.length <= 12 && value.count { it == '.' } <= 1 && value.all { it.isDigit() || it == '.' }) {
+                                kindergartenRateText = value
+                            }
+                        },
+                        label = { Text("幼儿园每节金额（元）") },
+                        placeholder = { Text(formatCourseRate(DEFAULT_KINDERGARTEN_RATE)) },
+                        supportingText = if (!validKindergartenRate) {
+                            { Text("请输入大于 0 的有效金额") }
+                        } else null,
+                        isError = !validKindergartenRate,
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    )
                 }
 
                 // Color picker — click to open palette
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("卡片颜色", style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.width(8.dp))
-                    val previewColor = if (selectedColor.isEmpty()) Color(0xFFCBD5E1)
-                        else Color(android.graphics.Color.parseColor(selectedColor))
+                    val previewColor = parseColorSafe(selectedColor) ?: Color(0xFFCBD5E1)
                     Box(
                         modifier = Modifier
                             .size(28.dp)
@@ -161,8 +189,20 @@ fun AddCourseDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(name, location, selectedDay, startTime, endTime, durationStr.toFloatOrNull() ?: 1.5f, isKindergarten, selectedColor) },
-                enabled = name.isNotBlank() && location.isNotBlank() && startTime.length >= 4 && endTime.length >= 4,
+                onClick = {
+                    onConfirm(
+                        name,
+                        location,
+                        selectedDay,
+                        startTime,
+                        endTime,
+                        durationStr.toFloatOrNull() ?: 1.5f,
+                        isKindergarten,
+                        kindergartenRate ?: DEFAULT_KINDERGARTEN_RATE,
+                        selectedColor,
+                    )
+                },
+                enabled = name.isNotBlank() && location.isNotBlank() && validTime && durationStr.isNotBlank() && validKindergartenRate,
             ) { Text("保存") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
@@ -177,6 +217,8 @@ fun AddCourseDialog(
         )
     }
 }
+
+fun formatCourseRate(value: Double): String = String.format(java.util.Locale.ROOT, "%.2f", value)
 
 @Composable
 private fun TimeFields(

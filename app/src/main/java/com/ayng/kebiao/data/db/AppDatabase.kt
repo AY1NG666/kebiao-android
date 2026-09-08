@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.ayng.kebiao.data.db.dao.AttendanceDao
 import com.ayng.kebiao.data.db.dao.CourseDao
 import com.ayng.kebiao.data.db.dao.SalaryRuleDao
@@ -13,7 +15,7 @@ import com.ayng.kebiao.data.db.entity.SalaryRule
 
 @Database(
     entities = [Course::class, Attendance::class, SalaryRule::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -33,8 +35,17 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "kebiao.db"
                 )
+                .addMigrations(MIGRATION_3_4)
                 .fallbackToDestructiveMigration()
                 .build().also { INSTANCE = it }
+            }
+        }
+
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE courses ADD COLUMN kindergartenRate REAL NOT NULL DEFAULT 55.0"
+                )
             }
         }
     }

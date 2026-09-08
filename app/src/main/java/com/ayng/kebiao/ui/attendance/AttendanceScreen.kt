@@ -49,7 +49,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ayng.kebiao.data.db.entity.Attendance
+import com.ayng.kebiao.data.db.entity.DEFAULT_KINDERGARTEN_RATE
 import java.text.SimpleDateFormat
+import java.text.ParsePosition
 import java.util.Calendar
 import java.util.Locale
 
@@ -235,26 +237,37 @@ fun rememberDateFormat(millis: Long): String {
 
 /** Try multiple date formats */
 private fun parseDateFlexible(s: String): java.util.Date? {
+    val text = s.trim()
+    if (text.isEmpty()) return null
+    val currentYear = Calendar.getInstance().get(Calendar.YEAR)
     val formats = listOf(
-        SimpleDateFormat("yyyy-MM-dd", Locale.CHINESE),
-        SimpleDateFormat("yyyy/MM/dd", Locale.CHINESE),
-        SimpleDateFormat("yyyy.MM.dd", Locale.CHINESE),
-        SimpleDateFormat("yyyy年M月d日", Locale.CHINESE),
-        SimpleDateFormat("M月d日", Locale.CHINESE),
+        "yyyy-MM-dd" to false,
+        "yyyy/MM/dd" to false,
+        "yyyy.MM.dd" to false,
+        "yyyy年M月d日" to false,
+        "yyyy年MM月dd日" to false,
+        "M月d日" to true,
+        "MM月dd日" to true,
+        "M月d号" to true,
+        "M.d" to true,
+        "M-d" to true,
+        "M/d" to true,
     )
-    for (fmt in formats) {
-        try {
-            val d = fmt.parse(s)
-            if (d != null) {
-                if (s.length <= 6) {
-                    val cal = Calendar.getInstance()
-                    cal.time = d
-                    cal.set(Calendar.YEAR, Calendar.getInstance().get(Calendar.YEAR))
-                    return cal.time
-                }
-                return d
-            }
-        } catch (_: Exception) {}
+    for ((pattern, isShortDate) in formats) {
+        val formatter = SimpleDateFormat(pattern, Locale.CHINESE).apply { isLenient = false }
+        val position = ParsePosition(0)
+        val parsed = formatter.parse(text, position) ?: continue
+        if (position.index != text.length) continue
+
+        val cal = Calendar.getInstance().apply {
+            time = parsed
+            if (isShortDate) set(Calendar.YEAR, currentYear)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        return cal.time
     }
     return null
 }
@@ -297,7 +310,7 @@ fun RecordAttendanceDialog(
     val recordedCourseIds = existingAttendances
         .filter { isSameDay(it.date, dateMillis) }
         .map { it.courseId }.toSet()
-    var scheduleEntries by remember(todayCourses, recordedCourseIds) {
+    var scheduleEntries by remember(dateMillis, todayCourses, recordedCourseIds) {
         mutableStateOf(todayCourses.map {
             DayEntry(course = it, alreadyRecorded = it.id in recordedCourseIds, checked = it.id !in recordedCourseIds)
         })
@@ -379,7 +392,7 @@ fun RecordAttendanceDialog(
                                         Text("此课程已录入，无需重复", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                                     } else if (course.isKindergarten) {
                                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                                            Text("幼儿园 ¥55/节", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                                            Text("幼儿园 ¥${formatYuan(course.effectiveKindergartenRate)}/节", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                                             Switch(
                                                 checked = entry.checked,
                                                 onCheckedChange = {
@@ -445,7 +458,7 @@ fun RecordAttendanceDialog(
                         HorizontalDivider()
                         if (selectedCourse.isKindergarten) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("到课（¥55/节）", style = MaterialTheme.typography.bodyMedium)
+                                Text("到课（¥${formatYuan(selectedCourse.effectiveKindergartenRate)}/节）", style = MaterialTheme.typography.bodyMedium)
                                 Switch(checked = customKinderChecked, onCheckedChange = { customKinderChecked = it })
                             }
                         } else {
@@ -468,7 +481,7 @@ fun RecordAttendanceDialog(
                 }
             } else {
                 selectedCourseId != null && customParsedDate != null &&
-                (selectedCourse?.isKindergarten == true && customKinderChecked || (selectedCourse?.isKindergarten == false && customStudentCount.isNotBlank()))
+                (selectedCourse?.isKindergarten == true && customKinderChecked || (selectedCourse?.isKindergarten == false && (customStudentCount.toIntOrNull() ?: 0) > 0))
             }
             TextButton(
                 onClick = {
@@ -503,6 +516,8 @@ private fun isSameDay(millis1: Long, millis2: Long): Boolean {
            cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
 }
 
+private fun formatYuan(value: Double): String = String.format(Locale.ROOT, "%.2f", value)
+
 @Composable
 fun EditAttendanceDialog(
     attendance: Attendance,
@@ -526,7 +541,7 @@ fun EditAttendanceDialog(
                 Text("课程：${course?.name ?: "未知"}", style = MaterialTheme.typography.bodyLarge)
                 Text("日期：${rememberDateFormat(attendance.date)}", style = MaterialTheme.typography.bodySmall)
                 if (isKinder) {
-                    Text("幼儿园课程 ¥55/节", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    Text("幼儿园课程 ¥${formatYuan(course?.effectiveKindergartenRate ?: DEFAULT_KINDERGARTEN_RATE)}/节", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 } else {
                     OutlinedTextField(value = studentCountStr, onValueChange = { studentCountStr = it.filter { c -> c.isDigit() } },
                         label = { Text("上课人数") }, singleLine = true, modifier = Modifier.fillMaxWidth())

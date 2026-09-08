@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ayng.kebiao.data.db.entity.Course
+import com.ayng.kebiao.ui.parseColorSafe
 import com.ayng.kebiao.ui.theme.Primary
 import com.ayng.kebiao.ui.theme.Secondary
 import com.ayng.kebiao.ui.theme.SecondaryContainer
@@ -298,8 +299,8 @@ fun ScheduleScreen(vm: ScheduleViewModel) {
     if (showAddCourseDialog) {
         com.ayng.kebiao.ui.settings.AddCourseDialog(
             onDismiss = { showAddCourseDialog = false },
-            onConfirm = { name, location, day, start, end, duration, isKinder, color ->
-                vm.addCourse(name, location, day, start, end, duration, isKinder, color)
+            onConfirm = { name, location, day, start, end, duration, isKinder, kindergartenRate, color ->
+                vm.addCourse(name, location, day, start, end, duration, isKinder, kindergartenRate, color)
                 showAddCourseDialog = false
             },
         )
@@ -310,13 +311,4 @@ fun ScheduleScreen(vm: ScheduleViewModel) {
 private fun rememberDateFormat(millis: Long): String {
     val fmt = remember { SimpleDateFormat("MM/dd", Locale.CHINESE) }
     return fmt.format(Date(millis))
-}
-
-private fun parseColorSafe(hex: String): Color? {
-    if (hex.isBlank()) return null
-    return try {
-        Color(android.graphics.Color.parseColor(hex))
-    } catch (_: IllegalArgumentException) {
-        null
-    }
 }

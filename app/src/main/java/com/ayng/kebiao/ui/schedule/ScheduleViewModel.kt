@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.ayng.kebiao.data.db.entity.Course
+import com.ayng.kebiao.data.db.entity.DEFAULT_KINDERGARTEN_RATE
 import com.ayng.kebiao.data.repository.AppRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -19,9 +20,9 @@ class ScheduleViewModel(private val repo: AppRepository) : ViewModel() {
     /** Current week offset: 0 = this week, -1 = last week, +1 = next week */
     val currentWeekOffset = kotlinx.coroutines.flow.MutableStateFlow(0)
 
-    fun addCourse(name: String, location: String, dayOfWeek: Int, startTime: String, endTime: String, durationHours: Float, isKindergarten: Boolean = false, colorHex: String = "") {
+    fun addCourse(name: String, location: String, dayOfWeek: Int, startTime: String, endTime: String, durationHours: Float, isKindergarten: Boolean = false, kindergartenRate: Double = DEFAULT_KINDERGARTEN_RATE, colorHex: String = "") {
         viewModelScope.launch {
-            repo.insertCourse(Course(name = name, location = location, dayOfWeek = dayOfWeek, startTime = startTime, endTime = endTime, durationHours = durationHours, isKindergarten = isKindergarten, colorHex = colorHex))
+            repo.insertCourse(Course(name = name, location = location, dayOfWeek = dayOfWeek, startTime = startTime, endTime = endTime, durationHours = durationHours, isKindergarten = isKindergarten, kindergartenRate = kindergartenRate, colorHex = colorHex))
         }
     }
 

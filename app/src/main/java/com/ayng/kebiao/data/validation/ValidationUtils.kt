@@ -1,0 +1,16 @@
+package com.ayng.kebiao.data.validation
+
+fun parseTimeMinutes(value: String): Int? {
+    val parts = value.trim().split(":")
+    if (parts.size != 2) return null
+    val hour = parts[0].toIntOrNull() ?: return null
+    val minute = parts[1].toIntOrNull() ?: return null
+    if (hour !in 0..23 || minute !in 0..59) return null
+    return hour * 60 + minute
+}
+
+fun isValidTimeRange(start: String, end: String): Boolean {
+    val startMinutes = parseTimeMinutes(start) ?: return false
+    val endMinutes = parseTimeMinutes(end) ?: return false
+    return endMinutes > startMinutes
+}

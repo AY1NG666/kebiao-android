@@ -18,6 +18,9 @@ interface AttendanceDao {
     """)
     fun getAll(): Flow<List<Attendance>>
 
+    @Query("SELECT * FROM attendances ORDER BY id")
+    suspend fun getAllSync(): List<Attendance>
+
     @Query("""
         SELECT * FROM attendances
         WHERE date >= :startOfMonth AND date < :startOfNextMonth
@@ -27,6 +30,14 @@ interface AttendanceDao {
 
     @Query("SELECT * FROM attendances WHERE courseId = :courseId ORDER BY date DESC")
     fun getByCourse(courseId: Long): Flow<List<Attendance>>
+
+    @Query("""
+        SELECT * FROM attendances
+        WHERE courseId = :courseId AND date >= :startOfDay AND date < :startOfNextDay
+        ORDER BY id
+        LIMIT 1
+    """)
+    suspend fun getByCourseAndDay(courseId: Long, startOfDay: Long, startOfNextDay: Long): Attendance?
 
     @Query("SELECT * FROM attendances WHERE id = :id")
     suspend fun getById(id: Long): Attendance?

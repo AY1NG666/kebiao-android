@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.Calendar
 
 class AppRepository(
@@ -17,9 +19,10 @@ class AppRepository(
     private val attendanceDao: AttendanceDao,
     private val salaryRuleDao: SalaryRuleDao,
 ) {
-    // Data version: increments on any attendance change, used for smart salary refresh
+    // Data version: increments on any data change that affects salary.
     private val _dataVersion = MutableStateFlow(0)
     val dataVersion: StateFlow<Int> = _dataVersion
+    private val attendanceWriteMutex = Mutex()
 
     private fun bumpVersion() { _dataVersion.value++ }
 
@@ -29,13 +32,45 @@ class AppRepository(
 
     fun getCoursesByDay(day: Int): Flow<List<Course>> = courseDao.getByDay(day)
 
-    suspend fun insertCourse(course: Course): Long = courseDao.insert(course)
+    suspend fun insertCourse(course: Course): Long {
+        val id = courseDao.insert(course)
+        bumpVersion()
+        return id
+    }
 
-    suspend fun insertCourses(courses: List<Course>) = courseDao.insertAll(courses)
+    suspend fun insertCourses(courses: List<Course>) {
+        courseDao.insertAll(courses)
+        bumpVersion()
+    }
 
-    suspend fun deleteCourse(course: Course) = courseDao.delete(course)
+    suspend fun importCoursesPreservingAttendance(courses: List<Course>) {
+        val existing = courseDao.getAllSync()
+        val existingByName = existing.associateBy { it.name }
+        val imported = courses.map { course ->
+            existingByName[course.name]?.let { old ->
+                course.copy(id = old.id)
+            } ?: course.copy(id = 0)
+        }
+        imported.forEach { course ->
+            if (course.id == 0L) courseDao.insert(course) else courseDao.update(course)
+        }
+        bumpVersion()
+    }
 
-    suspend fun deleteAllCourses() = courseDao.deleteAll()
+    suspend fun updateCourse(course: Course) {
+        courseDao.update(course)
+        bumpVersion()
+    }
+
+    suspend fun deleteCourse(course: Course) {
+        courseDao.delete(course)
+        bumpVersion()
+    }
+
+    suspend fun deleteAllCourses() {
+        courseDao.deleteAll()
+        bumpVersion()
+    }
 
     suspend fun getCourseById(id: Long): Course? = courseDao.getById(id)
 
@@ -54,13 +89,33 @@ class AppRepository(
     }
 
     suspend fun insertAttendance(attendance: Attendance): Long {
-        val id = attendanceDao.insert(attendance)
-        bumpVersion()
-        return id
+        return attendanceWriteMutex.withLock {
+            val normalized = attendance.copy(date = startOfDay(attendance.date))
+            val dayStart = normalized.date
+            val dayEnd = Calendar.getInstance().apply {
+                timeInMillis = dayStart
+                add(Calendar.DAY_OF_YEAR, 1)
+            }.timeInMillis
+            val existing = attendanceDao.getByCourseAndDay(normalized.courseId, dayStart, dayEnd)
+            val id = if (existing == null) {
+                attendanceDao.insert(normalized)
+            } else {
+                attendanceDao.update(normalized.copy(id = existing.id))
+                existing.id
+            }
+            bumpVersion()
+            id
+        }
     }
 
     suspend fun updateAttendance(attendance: Attendance) {
-        attendanceDao.update(attendance)
+        attendanceDao.update(
+            attendance.copy(
+                date = startOfDay(attendance.date),
+                studentCount = attendance.studentCount.coerceAtLeast(0),
+                assistantCount = attendance.assistantCount.coerceAtLeast(0),
+            )
+        )
         bumpVersion()
     }
 
@@ -72,6 +127,36 @@ class AppRepository(
     suspend fun deleteAllAttendances() {
         attendanceDao.deleteAll()
         bumpVersion()
+    }
+
+    suspend fun deduplicateAttendances() {
+        val latestByKey = linkedMapOf<String, Attendance>()
+        var changed = false
+        for (attendance in attendanceDao.getAllSync()) {
+            val dayStart = startOfDay(attendance.date)
+            val key = "${attendance.courseId}:$dayStart"
+            latestByKey.remove(key)?.let { previous ->
+                attendanceDao.deleteById(previous.id)
+                changed = true
+            }
+            val normalized = attendance.copy(date = dayStart)
+            if (attendance.date != dayStart) {
+                attendanceDao.update(normalized)
+                changed = true
+            }
+            latestByKey[key] = normalized
+        }
+        if (changed) bumpVersion()
+    }
+
+    private fun startOfDay(millis: Long): Long {
+        return Calendar.getInstance().apply {
+            timeInMillis = millis
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
     }
 
     // ── Salary Rules ──
@@ -90,7 +175,7 @@ class AppRepository(
 
     // ── Salary Calculation ──
     // 普通课: 学生 × ¥7 + 助教 × ¥3
-    // 幼儿园课: 固定 ¥55/节
+    // 幼儿园课: 使用课程上保存的每节金额
 
     suspend fun calculateMonthlySalary(year: Int, month: Int): SalaryBreakdown {
         val cal = Calendar.getInstance()
@@ -109,7 +194,7 @@ class AppRepository(
         for (a in list) {
             val course = courseDao.getById(a.courseId)
             val rate = if (course?.isKindergarten == true) {
-                55.0
+                course.effectiveKindergartenRate
             } else {
                 a.studentCount * 7.0 + a.assistantCount * 3.0
             }
